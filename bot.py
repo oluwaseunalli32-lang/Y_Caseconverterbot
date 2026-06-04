@@ -8,21 +8,17 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app for Render's port binding
+# Initialize Flask app
 app = Flask(__name__)
 
-# Global variable to store the application instance
-telegram_app = None
-
 # Storage for the user's last message text (Simple memory cache)
-# Note: In production, a database or redis is preferred, but this works for a lightweight bot!
 user_data_store = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
     await update.message.reply_html(
-        rf"👋 Hi {user.mention_html()}!<br><br>"
+        f"👋 Hi {user.mention_html()}!\n\n"
         "Welcome to <b>Y_Caseconverterbot</b>. Send me any text, and I will help you format it instantly!"
     )
 
@@ -77,12 +73,11 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         converted = original_text
 
     # Wrap in code block for easy one-tap copying in Telegram
-    formatted_text = f"```{converted}
-```"
+    formatted_text = f"```{converted}```"
     
     await query.edit_message_text(text=formatted_text, parse_mode="MarkdownV2")
 
-@app.route('/' + os.getenv('TOKEN', ''), methods=['POST'])
+@app.route('/' + os.getenv('TOKEN', 'telegram-token'), methods=['POST'])
 def webhook():
     """Receive updates from Telegram and feed them into the application."""
     if request.method == "POST":
@@ -94,29 +89,28 @@ def webhook():
 def index():
     return "Bot is running!", 200
 
-def main():
-    global telegram_app
-    token = os.getenv("TOKEN")
-    url = os.getenv("RENDER_EXTERNAL_URL") # Provided automatically by Render
+# Global setup block for production/Gunicorn environments
+token = os.getenv("TOKEN")
+url = os.getenv("RENDER_EXTERNAL_URL")
 
-    # Build the Application
-    telegram_app = Application.builder().token(token).updater(None).build()
+if not token or not url:
+    logger.warning("Environment variables TOKEN or RENDER_EXTERNAL_URL are missing!")
 
-    # Add handlers
-    telegram_app.add_handler(CommandHandler("start", start))
-    telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    telegram_app.add_handler(CallbackQueryHandler(button_click))
+# Build the Telegram Application
+telegram_app = Application.builder().token(token).updater(None).build()
 
-    # Initialize the app background tasks
-    telegram_app.initialize()
-    telegram_app.start()
+# Add handlers
+telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+telegram_app.add_handler(CallbackQueryHandler(button_click))
 
-    # Set Telegram Webhook URL
+# Initialize the app background tasks and establish webhook
+telegram_app.initialize()
+telegram_app.start()
+if url and token:
     telegram_app.bot.set_webhook(url=f"{url}/{token}")
 
-    # Start Flask server
+if __name__ == '__main__':
+    # This block only executes if you run 'python bot.py' directly locally
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
-
-if __name__ == '__main__':
-    main()
