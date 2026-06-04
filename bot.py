@@ -61,8 +61,8 @@ async def button_click(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     else:
         converted = original_text
 
-    await query.edit_message_text(text=f"```{converted}
-```", parse_mode="MarkdownV2")
+    # Fixed syntax formatting for Markdown code block strings
+    await query.edit_message_text(text=f'```{converted}```', parse_mode="MarkdownV2")
 
 def main():
     token = os.getenv("TOKEN")
